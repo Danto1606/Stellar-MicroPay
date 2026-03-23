@@ -87,16 +87,18 @@ export interface PaymentHistoryResponse {
 
 // ─── Account helpers ────────────────────────────────────────────────────────
 
+/** Sentinel error message used to detect unfunded accounts in the UI. */
+export const ACCOUNT_NOT_FOUND_ERROR = "ACCOUNT_NOT_FOUND";
+
 /**
  * Fetch all asset balances for a Stellar account.
  *
  * @param publicKey - The Stellar public key (G...) of the account to query.
  * @returns A promise resolving to an array of {@link WalletBalance} objects.
- * @throws {Error} If the account is not found or has never been funded.
+ * @throws {Error} With message `ACCOUNT_NOT_FOUND` if the account has never been funded.
  *
  * @see {@link https://developers.stellar.org/docs/data/horizon/api-reference/resources/accounts | Horizon Accounts API}
 */
-
 export async function getBalances(publicKey: string): Promise<WalletBalance[]> {
   try {
     const account = await server.loadAccount(publicKey);
@@ -111,9 +113,34 @@ export async function getBalances(publicKey: string): Promise<WalletBalance[]> {
         assetCode: typed.asset_code,
       };
     });
-  } catch (err) {
+  } catch (err: unknown) {
+    // Horizon returns 404 for unfunded accounts — surface a sentinel so the
+    // UI can offer the Friendbot funding button instead of a generic error.
+    const horizonErr = err as { response?: { status?: number } };
+    if (horizonErr?.response?.status === 404) {
+      throw new Error(ACCOUNT_NOT_FOUND_ERROR);
+    }
     console.error("Failed to load account balances:", err);
     throw new Error("Could not fetch account. Is this address funded?");
+  }
+}
+
+/**
+ * Fund an unfunded testnet account via Stellar Friendbot.
+ * Only call this on testnet — Friendbot does not exist on mainnet.
+ *
+ * @param publicKey - The Stellar public key (G...) to fund.
+ * @returns A promise that resolves when funding succeeds.
+ * @throws {Error} If the Friendbot request fails.
+ *
+ * @see {@link https://developers.stellar.org/docs/learn/networks | Stellar Networks}
+ */
+export async function fundWithFriendbot(publicKey: string): Promise<void> {
+  const res = await fetch(
+    `https://friendbot.stellar.org?addr=${encodeURIComponent(publicKey)}`
+  );
+  if (!res.ok) {
+    throw new Error(`Friendbot failed: ${res.status} ${res.statusText}`);
   }
 }
 
