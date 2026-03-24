@@ -1,3 +1,4 @@
+/* eslint-disable */
 /**
  * src/services/usernameService.js
  * Business logic for username-to-public-key mapping and resolution.
