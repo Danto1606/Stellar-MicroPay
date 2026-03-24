@@ -1,28 +1,33 @@
 import React, { useState } from 'react';
 import clsx from 'clsx';
+import { QRCodeSVG } from 'qrcode.react'; // Ensure this is installed
 
 export default function PaymentLinkGenerator() {
   const [destination, setDestination] = useState('');
   const [amount, setAmount] = useState('');
   const [memo, setMemo] = useState('');
+  const [expiry, setExpiry] = useState('never'); // New: Expiry state
   const [generatedLink, setGeneratedLink] = useState('');
   const [copied, setCopied] = useState(false);
+  const [showQR, setShowQR] = useState(false); // New: QR Toggle
 
   const handleGenerate = () => {
     if (!destination || !amount) return;
 
-    // 1. Create the data object
+    // Calculate expiry timestamp
+    let validUntil: number | null = null;
+    const now = Date.now();
+    if (expiry === '24h') validUntil = now + 24 * 60 * 60 * 1000;
+    if (expiry === '7d') validUntil = now + 7 * 24 * 60 * 60 * 1000;
+
     const paymentData = {
       destination: destination.trim(),
       amount: amount.toString(),
       memo: memo.trim() || undefined,
+      validUntil, // Requirement: Expiry encoding
     };
 
-    // 2. Encode to Base64
-    // btoa() works great for simple JSON strings in the browser
     const base64Data = btoa(JSON.stringify(paymentData));
-    
-    // 3. Construct the final URL pointing to your new /pay page
     const url = `${window.location.origin}/pay?data=${base64Data}`;
     setGeneratedLink(url);
     setCopied(false);
@@ -81,6 +86,20 @@ export default function PaymentLinkGenerator() {
           </div>
         </div>
 
+        {/* New: Expiry Dropdown */}
+        <div>
+          <label className="label">Link Expiry</label>
+          <select 
+            value={expiry} 
+            onChange={(e) => setExpiry(e.target.value)}
+            className="input-field bg-cosmos-950 border-stellar-400/20 text-slate-300"
+          >
+            <option value="never">Never Expire</option>
+            <option value="24h">24 Hours</option>
+            <option value="7d">7 Days</option>
+          </select>
+        </div>
+
         <button
           onClick={handleGenerate}
           disabled={!destination || !amount}
@@ -90,8 +109,17 @@ export default function PaymentLinkGenerator() {
         </button>
 
         {generatedLink && (
-          <div className="mt-4 p-3 rounded-xl bg-stellar-400/5 border border-stellar-400/20 animate-slide-up">
-            <p className="text-[10px] uppercase tracking-wider text-stellar-400 font-bold mb-2">Generated URL</p>
+          <div className="mt-4 p-4 rounded-xl bg-stellar-400/5 border border-stellar-400/20 animate-slide-up">
+            <div className="flex justify-between items-center mb-2">
+              <p className="text-[10px] uppercase tracking-wider text-stellar-400 font-bold">Generated URL</p>
+              <button 
+                onClick={() => setShowQR(!showQR)}
+                className="text-[10px] text-slate-400 hover:text-white underline"
+              >
+                {showQR ? 'Hide QR' : 'Show QR'}
+              </button>
+            </div>
+
             <div className="flex gap-2">
               <input
                 readOnly
@@ -101,13 +129,21 @@ export default function PaymentLinkGenerator() {
               <button
                 onClick={copyToClipboard}
                 className={clsx(
-                  "px-3 rounded font-medium text-xs transition-all",
+                  "px-3 rounded font-medium text-xs transition-all shrink-0",
                   copied ? "bg-emerald-500 text-white" : "bg-stellar-400 text-black hover:bg-stellar-300"
                 )}
               >
                 {copied ? 'Copied!' : 'Copy'}
               </button>
             </div>
+
+            {/* New: Inline QR Code Display */}
+            {showQR && (
+              <div className="mt-4 flex flex-col items-center bg-white p-3 rounded-lg mx-auto w-fit">
+                <QRCodeSVG value={generatedLink} size={140} />
+                <p className="text-[10px] text-black font-bold mt-2">Scan to Pay</p>
+              </div>
+            )}
           </div>
         )}
       </div>
